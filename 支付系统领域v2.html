@@ -1,0 +1,319 @@
+
+<style>
+.dm{font-family:var(--font-sans);padding:16px 0}
+.layer-label{font-size:11px;color:var(--color-text-tertiary);font-weight:500;letter-spacing:.04em;margin-bottom:6px;padding-left:2px}
+.layer{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.box{border-radius:8px;padding:8px 12px;min-width:124px;max-width:190px;border:.5px solid}
+.box-title{font-size:12px;font-weight:500;margin-bottom:4px}
+.box-field{font-size:11px;margin:1px 0;opacity:.85}
+.box-note{font-size:10px;margin-top:4px;font-style:italic;opacity:.7}
+.rel{display:flex;align-items:center;font-size:10px;color:var(--color-text-tertiary);padding-top:16px;white-space:nowrap}
+.divider{border:none;border-top:.5px solid var(--color-border-tertiary);margin:4px 0 10px}
+.moonton{background:#EEEDFE;border-color:#534AB7}
+.moonton .box-title{color:#3C3489}
+.moonton .box-field{color:#534AB7}
+.channel{background:#E1F5EE;border-color:#0F6E56}
+.channel .box-title{color:#085041}
+.channel .box-field{color:#0F6E56}
+.merchant{background:#FAECE7;border-color:#993C1D}
+.merchant .box-title{color:#712B13}
+.merchant .box-field{color:#993C1D}
+.rule{background:#FAEEDA;border-color:#854F0B}
+.rule .box-title{color:#633806}
+.rule .box-field{color:#854F0B}
+.neutral{background:#F1EFE8;border-color:#5F5E5A}
+.neutral .box-title{color:#444441}
+.neutral .box-field{color:#5F5E5A}
+.platform{background:#E6F1FB;border-color:#185FA5}
+.platform .box-title{color:#0C447C}
+.platform .box-field{color:#185FA5}
+@media(prefers-color-scheme:dark){
+.moonton{background:#26215C;border-color:#AFA9EC}.moonton .box-title{color:#CECBF6}.moonton .box-field{color:#AFA9EC}
+.channel{background:#04342C;border-color:#5DCAA5}.channel .box-title{color:#9FE1CB}.channel .box-field{color:#5DCAA5}
+.merchant{background:#4A1B0C;border-color:#F0997B}.merchant .box-title{color:#F5C4B3}.merchant .box-field{color:#F0997B}
+.rule{background:#412402;border-color:#EF9F27}.rule .box-title{color:#FAC775}.rule .box-field{color:#EF9F27}
+.neutral{background:#2C2C2A;border-color:#B4B2A9}.neutral .box-title{color:#D3D1C7}.neutral .box-field{color:#B4B2A9}
+.platform{background:#042C53;border-color:#85B7EB}.platform .box-title{color:#B5D4F4}.platform .box-field{color:#85B7EB}
+}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--color-text-secondary)}
+.legend-dot{width:10px;height:10px;border-radius:2px;border:.5px solid}
+.principles{margin-top:12px;font-size:11px;color:var(--color-text-tertiary);line-height:1.9;border-top:.5px solid var(--color-border-tertiary);padding-top:10px}
+</style>
+<div class="dm">
+
+<div class="layer-label">⓪ 平台层 — 所有层的公共依赖（横切基础设施）</div>
+<div class="layer">
+  <div class="box platform">
+    <div class="box-title">Country 国家</div>
+    <div class="box-field">code: String (ISO)</div>
+    <div class="box-field">name: String</div>
+    <div class="box-note">所有country字段的数据源</div>
+  </div>
+  <div class="box platform">
+    <div class="box-title">Currency 币种</div>
+    <div class="box-field">code: String (ISO)</div>
+    <div class="box-field">name: String</div>
+    <div class="box-note">当前通过string[]引用，待规范化</div>
+  </div>
+  <div class="box platform">
+    <div class="box-title">Language 语言</div>
+    <div class="box-field">code: String (ISO)</div>
+    <div class="box-field">name: String</div>
+  </div>
+</div>
+<hr class="divider">
+
+<div class="layer-label">① 主体层 — 谁在参与</div>
+<div class="layer">
+  <div class="box moonton">
+    <div class="box-title">MoontonEntity 平台主体</div>
+    <div class="box-field">name: String</div>
+    <div class="box-field">region: FK → Country</div>
+  </div>
+  <div class="rel">1 ──────── *</div>
+  <div class="box moonton">
+    <div class="box-title">MoontonKYBRecord</div>
+    <div class="box-field">moonton_entity_id: FK</div>
+    <div class="box-field">channel_id: FK</div>
+    <div class="box-field">status: Enum</div>
+    <div class="box-note">by渠道，独立表</div>
+  </div>
+  <div class="rel" style="padding-top:8px">│</div>
+  <div class="box merchant">
+    <div class="box-title">Merchant 商家</div>
+    <div class="box-field">name: String</div>
+  </div>
+  <div class="rel">1 ── *</div>
+  <div class="box merchant">
+    <div class="box-title">MerchantEntity 商家主体</div>
+    <div class="box-field">merchant_id: FK</div>
+    <div class="box-field">name: String</div>
+    <div class="box-field">region: FK → Country</div>
+    <div class="box-note">反向挂，支持1:N</div>
+  </div>
+  <div class="rel">1 ──── *</div>
+  <div class="box merchant">
+    <div class="box-title">MerchantKYBRecord</div>
+    <div class="box-field">merchant_entity_id: FK</div>
+    <div class="box-field">channel_id: FK</div>
+    <div class="box-field">status: Enum</div>
+    <div class="box-note">by渠道，独立表</div>
+  </div>
+</div>
+<hr class="divider">
+
+<div class="layer-label">② 合同层 — 双方约定了什么</div>
+<div class="layer">
+  <div class="box channel">
+    <div class="box-title">ChannelContract 渠道合同</div>
+    <div class="box-field">moonton_entity_id: FK</div>
+    <div class="box-field">channel_id: FK</div>
+    <div class="box-field">merchant_mode: Enum（不可改）</div>
+    <div class="box-field">channel_rate: Decimal</div>
+    <div class="box-field">currency: String</div>
+    <div class="box-field">status: Enum (DRAFT/ACTIVE/TERMINATED/VOIDED)</div>
+    <div class="box-field">terminated_reason: String</div>
+  </div>
+  <div class="rel" style="padding-top:8px">│</div>
+  <div class="box neutral" style="align-self:center">
+    <div class="box-title">Global 缔约角色</div>
+    <div class="box-note">签约策略，非实体<br>UI仅展示，不可编辑</div>
+  </div>
+  <div class="rel" style="padding-top:8px">│</div>
+  <div class="box merchant">
+    <div class="box-title">MerchantContract 商户合同</div>
+    <div class="box-field">moonton_entity_id: FK</div>
+    <div class="box-field">merchant_id: FK</div>
+    <div class="box-field">settlement_cycle: Int</div>
+    <div class="box-field">currency: String</div>
+    <div class="box-field">status: Enum (DRAFT/ACTIVE/TERMINATED/VOIDED)</div>
+    <div class="box-field">terminated_reason: String</div>
+    <div class="box-note">费率移至ContractPaymentMethod</div>
+  </div>
+  <div class="rel">1 ── *</div>
+  <div class="box merchant">
+    <div class="box-title">ContractPaymentMethod 合同支付方式</div>
+    <div class="box-field">merchant_contract_id: FK</div>
+    <div class="box-field">payment_method_id: FK</div>
+    <div class="box-field">quoted_rate: Decimal</div>
+    <div class="box-field">status: Enum</div>
+    <div class="box-note">费率数据主人，合同层约定</div>
+  </div>
+</div>
+<hr class="divider">
+
+<div class="layer-label">③ 接入层 — 以什么身份进入渠道</div>
+<div class="layer">
+  <div class="box rule">
+    <div class="box-title">Onboarding 进件</div>
+    <div class="box-field">parent_onboarding_id: FK（nullable，重提指向）</div>
+    <div class="box-field">channel_contract_id: FK</div>
+    <div class="box-field">moonton_entity_id（nullable, MOR）</div>
+    <div class="box-field">merchant_entity_id（nullable, SOR）</div>
+    <div class="box-field">country: FK → Country（nullable, SOR）</div>
+    <div class="box-field">application_id: FK（nullable, SOR）</div>
+    <div class="box-field">status: Enum (DRAFT/SUBMITTED/REVIEWING/APPROVED/REJECTED/VOIDED/SUSPENDED)</div>
+    <div class="box-note">nullable FK替代多态FK；重提新建记录</div>
+  </div>
+  <div class="rel">1 ──── 1</div>
+  <div class="box channel">
+    <div class="box-title">MerchantAccount 商户号</div>
+    <div class="box-field">channel_id: FK</div>
+    <div class="box-field">channel_contract_id: FK</div>
+    <div class="box-field">onboarding_id: FK</div>
+    <div class="box-field">api_key / secret_key</div>
+    <div class="box-field">mode: Enum</div>
+    <div class="box-field">status: Enum (ACTIVE/SUSPENDED)</div>
+    <div class="box-note">进件通过后自动生成；合同作废级联冻结</div>
+  </div>
+  <div class="rel" style="padding-top:8px">│</div>
+  <div class="box merchant">
+    <div class="box-title">Application 店铺</div>
+    <div class="box-field">merchant_id: FK</div>
+    <div class="box-field">name: String</div>
+    <div class="box-field">bundle_id: String</div>
+    <div class="box-field">status: Enum</div>
+  </div>
+</div>
+<hr class="divider">
+
+<div class="layer-label">④ 产品层 — 对商家承诺的服务</div>
+<div class="layer">
+  <div class="box moonton">
+    <div class="box-title">PaymentMethod 支付方式</div>
+    <div class="box-field">name: String</div>
+    <div class="box-field">type: Enum</div>
+    <div class="box-field">status: Enum</div>
+    <div class="box-note">商家唯一可见，不感知渠道</div>
+  </div>
+  <div class="rel">│</div>
+  <div class="box rule">
+    <div class="box-title">AppPaymentConfig 应用支付配置</div>
+    <div class="box-field">app_id: FK</div>
+    <div class="box-field">payment_method_id: FK</div>
+    <div class="box-field">settlement_account_id: FK</div>
+    <div class="box-field">merchant_contract_id: FK</div>
+    <div class="box-field">status: Enum</div>
+    <div class="box-note">merchant_contract_id关联费率</div>
+  </div>
+  <div class="rel">│</div>
+  <div class="box merchant">
+    <div class="box-title">SettlementAccount 结算账户</div>
+    <div class="box-field">merchant_id: FK</div>
+    <div class="box-field">type: Enum</div>
+    <div class="box-field">account_name: String</div>
+    <div class="box-field">bank_info: String</div>
+    <div class="box-field">status: Enum</div>
+    <div class="box-note">ArcoPay运营录入，商家不可改</div>
+  </div>
+</div>
+<hr class="divider">
+
+<div class="layer-label">⑤ 路由层 — 选哪条通道走</div>
+<div class="layer">
+  <div class="box channel">
+    <div class="box-title">ChannelPaymentMethod 渠道支付方式</div>
+    <div class="box-field">channel_id: FK</div>
+    <div class="box-field">payment_method_id: FK</div>
+    <div class="box-field">supported_countries: string[]</div>
+    <div class="box-field">supported_currencies: string[]</div>
+    <div class="box-note">硬约束，数据主人在支付方式管理</div>
+  </div>
+  <div class="rel">│</div>
+  <div class="box rule">
+    <div class="box-title">RoutingRule 路由规则</div>
+    <div class="box-field">payment_method_id: FK</div>
+    <div class="box-field">channel_id: FK</div>
+    <div class="box-field">country: string[]（nullable）</div>
+    <div class="box-field">priority: Int</div>
+    <div class="box-field">weight: Decimal</div>
+    <div class="box-note">软控制，同项weight之和=100%</div>
+  </div>
+  <div class="rel">│</div>
+  <div class="box rule">
+    <div class="box-title">RoutingStrategy 路由策略</div>
+    <div class="box-field">payment_method_id: FK</div>
+    <div class="box-field">type: Enum (MANUAL/SMART)</div>
+    <div class="box-note">人工／智能，独立于规则</div>
+  </div>
+</div>
+<hr class="divider">
+
+<div class="layer-label">⑥ 技术层 — 通道的凭证与配置</div>
+<div class="layer">
+  <div class="box neutral">
+    <div class="box-title">ChannelConfig 渠道配置</div>
+    <div class="box-field">收银台模式</div>
+    <div class="box-field">传参规则</div>
+    <div class="box-field">回调地址</div>
+  </div>
+  <div class="rel">│</div>
+  <div class="box neutral">
+    <div class="box-title">ChannelStatus 渠道实时状态</div>
+    <div class="box-field">success_rate: Decimal</div>
+    <div class="box-field">latency: Int</div>
+    <div class="box-note">智能路由数据基础，系统写入</div>
+  </div>
+</div>
+<hr class="divider">
+
+<div class="layer-label">⑦ 资金层 — 钱如何流动与结算</div>
+<div class="layer">
+  <div class="box channel">
+    <div class="box-title">Transaction 交易记录</div>
+    <div class="box-field">merchant_account_id: FK</div>
+    <div class="box-field">payment_method_id: FK</div>
+    <div class="box-field">amount: Decimal</div>
+    <div class="box-field">currency: String</div>
+    <div class="box-field">status: Enum (SUCCESS/FAILED/REFUNDED)</div>
+    <div class="box-field">channel_rate: Decimal（快照）</div>
+    <div class="box-field">quoted_rate: Decimal（快照）</div>
+    <div class="box-note">费率快照，对账不依赖合同当前值</div>
+  </div>
+  <div class="rel">│</div>
+  <div class="box rule">
+    <div class="box-title">费率差报表（视图）</div>
+    <div class="box-field">quoted_rate − channel_rate</div>
+    <div class="box-field">维度：支付方式 × 渠道</div>
+    <div class="box-note">非实体，查询视图；倒挂红色预警</div>
+  </div>
+  <div class="rel">│</div>
+  <div class="box channel">
+    <div class="box-title">ChannelSettlementRecord 渠道结算</div>
+    <div class="box-field">channel_contract_id: FK</div>
+    <div class="box-field">channel_id: FK</div>
+    <div class="box-field">period_start / period_end: Date</div>
+    <div class="box-field">expected_amount: Decimal（系统计算）</div>
+    <div class="box-field">actual_amount: Decimal</div>
+    <div class="box-field">status: Enum (PENDING/IN_RECONCILIATION/SETTLED/DISPUTED)</div>
+    <div class="box-field">dispute_history: jsonb</div>
+    <div class="box-note">渠道→ArcoPay；SETTLED为终结态</div>
+  </div>
+  <div class="rel">│</div>
+  <div class="box merchant">
+    <div class="box-title">MerchantSettlementRecord 商家结算</div>
+    <div class="box-field">merchant_contract_id: FK</div>
+    <div class="box-field">merchant_id: FK</div>
+    <div class="box-field">settlement_account_id: FK</div>
+    <div class="box-field">period_start / period_end: Date</div>
+    <div class="box-field">expected_amount: Decimal（系统计算）</div>
+    <div class="box-field">actual_amount: Decimal</div>
+    <div class="box-field">status: Enum (PENDING/IN_RECONCILIATION/SETTLED/DISPUTED)</div>
+    <div class="box-field">dispute_history: jsonb</div>
+    <div class="box-note">ArcoPay→商家；SETTLED为终结态</div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#E6F1FB;border-color:#185FA5"></div>平台基础设施</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#EEEDFE;border-color:#534AB7"></div>平台侧</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E1F5EE;border-color:#0F6E56"></div>渠道侧</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FAECE7;border-color:#993C1D"></div>商家</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FAEEDA;border-color:#854F0B"></div>规则／策略／配置／视图</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#F1EFE8;border-color:#5F5E5A"></div>中性／状态</div>
+</div>
+<div class="principles">
+建模核心原则：① 每个概念只出现一次 ② 只连直接依赖，不连间接可推导 ③ 越被依赖的实体越靠上层 ④ Global是缔约策略不是实体 ⑤ 费率数据主人在ContractPaymentMethod，不在AppPaymentConfig ⑥ MoontonEntity与MerchantEntity职责不同拆表隔离 ⑦ KYB by渠道独立两表消灭多态FK ⑧ 数据主人唯一，其他页面只读+跳转 ⑨ 平台层是横切基础设施，所有country/currency字段最终应FK到平台层 ⑩ 币种是渠道×支付方式维度的属性，挂在ChannelPaymentMethod上 ⑪ 状态机是行为模型不进ER图，合法转换路径单独用状态机图表达 ⑫ 交易费率做快照，对账不依赖合同当前值 ⑬ 结算分两张表：渠道→ArcoPay / ArcoPay→商家，方向不同职责不同 ⑭ 进件重提新建记录，parent_onboarding_id记录重提关系，原记录保持REJECTED终结态
+</div>
+</div>
