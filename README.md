@@ -36,7 +36,7 @@
 
 ```
 ⓪ 平台层   Country  Currency
-① 主体层   MoontonEntity  Merchant  MerchantEntity  KYBRecord×2
+① 主体层   PlatformEntity  Merchant  MerchantEntity  KYBRecord×2
 ② 合同层   ChannelContract  MerchantContract  ContractPaymentMethod
 ③ 接入层   Onboarding  Application  MerchantAccount
 ④ 产品层   PaymentMethod  AppPaymentConfig  SettlementAccount
