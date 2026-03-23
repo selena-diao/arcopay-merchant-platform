@@ -11,7 +11,7 @@
 | 环境 | 链接 |
 |------|------|
 | Bolt 预览 | https://payment-merchant-mdm-7vo6.bolt.host |
-| 生产部署（Vercel） | https://moonton-payment-system-upgrade.vercel.app |
+| 生产部署（Vercel） | https://arcopay-merchant-platform.vercel.app|
 
 ---
 
