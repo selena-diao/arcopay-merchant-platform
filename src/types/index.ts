@@ -202,7 +202,10 @@ export type SettlementRecordStatus = 'PENDING' | 'IN_RECONCILIATION' | 'SETTLED'
 export interface DisputeHistoryEntry {
   time: string;
   operator: string;
-  note: string;
+  note?: string;
+  reason?: string;
+  claimed_amount?: number;
+  action?: string;
 }
 
 export interface ChannelSettlementRecord {
@@ -266,4 +269,20 @@ export interface RoutingStrategy {
   description: string;
 }
 
-export type NavPage = 'moonton-entity' | 'merchant' | 'channel' | 'channel-contracts' | 'merchant-contracts' | 'onboarding' | 'merchant-accounts' | 'payment-methods' | 'app-payment-configs' | 'routing-rules' | 'routing-strategies' | 'margin-report' | 'channel-settlement' | 'merchant-settlement' | 'platform-countries' | 'platform-currencies';
+export type TransactionStatus = 'SUCCESS' | 'FAILED' | 'REFUNDED';
+
+export interface Transaction {
+  id: string;
+  merchant_account_id: string;
+  payment_method_id: string;
+  amount: number;
+  currency: string;
+  status: TransactionStatus;
+  channel_rate: number;
+  quoted_rate: number;
+  created_at: string;
+  channel_name?: string;
+  payment_method_name?: string;
+}
+
+export type NavPage = 'dashboard' | 'moonton-entity' | 'merchant' | 'channel' | 'channel-contracts' | 'merchant-contracts' | 'onboarding' | 'merchant-accounts' | 'payment-methods' | 'app-payment-configs' | 'routing-rules' | 'routing-strategies' | 'margin-report' | 'transaction-ledger' | 'channel-settlement' | 'merchant-settlement' | 'platform-countries' | 'platform-currencies';

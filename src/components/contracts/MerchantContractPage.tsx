@@ -50,6 +50,7 @@ export function MerchantContractPage({
   const [filterMerchant, setFilterMerchant] = useState('all');
   const [filterEntity, setFilterEntity] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [rateFilter, setRateFilter] = useState<null | 'inverted' | 'at-risk'>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteContract, setDeleteContract] = useState<MerchantContract | null>(null);
@@ -77,14 +78,25 @@ export function MerchantContractPage({
       if (filterMerchant !== 'all' && c.merchant_id !== filterMerchant) return false;
       if (filterEntity !== 'all' && c.moonton_entity_id !== filterEntity) return false;
       if (filterStatus !== 'all' && c.status !== filterStatus) return false;
+      if (rateFilter !== null) {
+        const rates = entityChannelRates[c.moonton_entity_id];
+        if (!rates) return false;
+        const lowerBound = c.quoted_rate - rates.max;
+        const upperBound = c.quoted_rate - rates.min;
+        if (rateFilter === 'inverted') {
+          if (!(upperBound <= 0)) return false;
+        } else if (rateFilter === 'at-risk') {
+          if (!(lowerBound < 0 && upperBound > 0)) return false;
+        }
+      }
       return true;
     });
-  }, [contracts, filterMerchant, filterEntity, filterStatus]);
+  }, [contracts, filterMerchant, filterEntity, filterStatus, rateFilter, entityChannelRates]);
 
   const activeContracts = filtered.filter((c) => c.status === 'ACTIVE' || c.status === 'DRAFT');
   const historicalContracts = filtered.filter((c) => c.status === 'TERMINATED' || c.status === 'VOIDED');
 
-  const hasFilters = filterMerchant !== 'all' || filterEntity !== 'all' || filterStatus !== 'all';
+  const hasFilters = filterMerchant !== 'all' || filterEntity !== 'all' || filterStatus !== 'all' || rateFilter !== null;
 
   const handleSave = async (data: Omit<MerchantContract, 'id'>) => {
     try {
@@ -143,22 +155,45 @@ export function MerchantContractPage({
       {(invertedCount > 0 || atRiskCount > 0) && (
         <div className="mb-4 space-y-2">
           {invertedCount > 0 && (
-            <div className="flex items-start gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>
+            <div className="flex items-center gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">
                 检测到 <span className="font-semibold">{invertedCount}</span> 份合同
                 <span className="font-semibold">费率已倒挂</span>，请立即处理。
               </span>
+              <button
+                onClick={() => setRateFilter(rateFilter === 'inverted' ? null : 'inverted')}
+                className={cn(
+                  'flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-md text-xs font-semibold border transition-colors',
+                  rateFilter === 'inverted'
+                    ? 'bg-red-200 border-red-300 text-red-800'
+                    : 'bg-white border-red-300 text-red-700 hover:bg-red-100'
+                )}
+              >
+                {rateFilter === 'inverted' ? <X className="w-3 h-3" /> : <ArrowRight className="w-3 h-3" />}
+                {rateFilter === 'inverted' ? '取消筛选' : '立即处理'}
+              </button>
             </div>
           )}
           {atRiskCount > 0 && (
-            <div className="flex items-start gap-2.5 px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-700">
-              <Triangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>
+            <div className="flex items-center gap-2.5 px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-700">
+              <Triangle className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">
                 检测到 <span className="font-semibold">{atRiskCount}</span> 份合同存在
                 <span className="font-semibold">倒挂风险</span>，报价低于同主体最高渠道费率，请关注。
               </span>
-
+              <button
+                onClick={() => setRateFilter(rateFilter === 'at-risk' ? null : 'at-risk')}
+                className={cn(
+                  'flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-md text-xs font-semibold border transition-colors',
+                  rateFilter === 'at-risk'
+                    ? 'bg-orange-200 border-orange-300 text-orange-800'
+                    : 'bg-white border-orange-300 text-orange-700 hover:bg-orange-100'
+                )}
+              >
+                {rateFilter === 'at-risk' ? <X className="w-3 h-3" /> : <ArrowRight className="w-3 h-3" />}
+                {rateFilter === 'at-risk' ? '取消筛选' : '立即处理'}
+              </button>
             </div>
           )}
         </div>
@@ -207,7 +242,7 @@ export function MerchantContractPage({
             variant="ghost"
             size="sm"
             className="h-8 gap-1 text-gray-500 hover:text-gray-800"
-            onClick={() => { setFilterMerchant('all'); setFilterEntity('all'); setFilterStatus('all'); }}
+            onClick={() => { setFilterMerchant('all'); setFilterEntity('all'); setFilterStatus('all'); setRateFilter(null); }}
           >
             <X className="w-3.5 h-3.5" />
             清除筛选
@@ -219,6 +254,25 @@ export function MerchantContractPage({
           {historicalContracts.length > 0 && `，${historicalContracts.length} 份历史合同`}
         </span>
       </div>
+
+      {rateFilter !== null && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs text-gray-500">当前筛选：</span>
+          <span className={cn(
+            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold',
+            rateFilter === 'inverted' ? 'bg-red-100 text-red-700 ring-1 ring-inset ring-red-200' : 'bg-orange-100 text-orange-700 ring-1 ring-inset ring-orange-200'
+          )}>
+            {rateFilter === 'inverted' ? '筛选：已倒挂' : '筛选：倒挂风险'}
+            <button
+              onClick={() => setRateFilter(null)}
+              className="hover:opacity-70 transition-opacity"
+              aria-label="清除筛选"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        </div>
+      )}
 
       <div className="space-y-3">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">

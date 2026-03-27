@@ -7,11 +7,11 @@ import {
 } from '../../lib/settlementService';
 import { SettlementStatusBadge } from './SettlementStatusBadge';
 import { Button } from '../ui/button';
-import { Plus, ChevronRight } from 'lucide-react';
+import { Plus, ChevronRight, RotateCcw } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
-import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Input } from '../ui/input';
 import { useToast } from '../../hooks/use-toast';
 
 interface ChannelSettlementPageProps {
@@ -32,6 +32,9 @@ export function ChannelSettlementPage({ channels, channelContracts, onDrillDown 
   const [records, setRecords] = useState<ChannelSettlementRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'ALL' | SettlementRecordStatus>('ALL');
+  const [channelFilter, setChannelFilter] = useState<string>('ALL');
+  const [dateStart, setDateStart] = useState('');
+  const [dateEnd, setDateEnd] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
   const { toast } = useToast();
 
@@ -43,9 +46,27 @@ export function ChannelSettlementPage({ channels, channelContracts, onDrillDown 
   }, []);
 
   const filtered = useMemo(() => {
-    if (statusFilter === 'ALL') return records;
-    return records.filter((r) => r.status === statusFilter);
-  }, [records, statusFilter]);
+    return records.filter((r) => {
+      if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
+      if (channelFilter !== 'ALL') {
+        const matchDirect = r.channel_id === channelFilter;
+        if (!matchDirect) {
+          const contract = channelContracts.find((cc) => cc.id === r.channel_contract_id);
+          if (!contract || contract.channel_id !== channelFilter) return false;
+        }
+      }
+      if (dateStart && r.period_start < dateStart) return false;
+      if (dateEnd && r.period_end > dateEnd) return false;
+      return true;
+    });
+  }, [records, statusFilter, channelFilter, dateStart, dateEnd, channelContracts]);
+
+  const handleReset = () => {
+    setChannelFilter('ALL');
+    setStatusFilter('ALL');
+    setDateStart('');
+    setDateEnd('');
+  };
 
   const getChannelName = (record: ChannelSettlementRecord) => {
     const directMatch = channels.find((c) => c.id === record.channel_id);
@@ -74,24 +95,58 @@ export function ChannelSettlementPage({ channels, channelContracts, onDrillDown 
         </div>
         <Button onClick={() => setShowNewModal(true)} className="gap-2">
           <Plus className="w-4 h-4" />
-          新增结算记录
+          发起结算
         </Button>
       </div>
 
-      <div className="flex gap-2 mb-6">
-        {(['ALL', 'PENDING', 'IN_RECONCILIATION', 'SETTLED', 'DISPUTED'] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              statusFilter === s
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            {STATUS_LABELS[s]}
-          </button>
-        ))}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <Select value={channelFilter} onValueChange={setChannelFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="全部渠道" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">全部渠道</SelectItem>
+            {channels.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.display_name ?? c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'ALL' | SettlementRecordStatus)}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="全部状态" />
+          </SelectTrigger>
+          <SelectContent>
+            {(['ALL', 'PENDING', 'IN_RECONCILIATION', 'SETTLED', 'DISPUTED'] as const).map((s) => (
+              <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            value={dateStart}
+            onChange={(e) => setDateStart(e.target.value)}
+            className="w-40 text-sm"
+            placeholder="开始日期"
+          />
+          <span className="text-slate-400 text-sm">—</span>
+          <Input
+            type="date"
+            value={dateEnd}
+            onChange={(e) => setDateEnd(e.target.value)}
+            className="w-40 text-sm"
+            placeholder="结束日期"
+          />
+        </div>
+
+        <Button variant="outline" size="sm" onClick={handleReset} className="gap-1.5 text-slate-500">
+          <RotateCcw className="w-3.5 h-3.5" />
+          重置
+        </Button>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -169,8 +224,6 @@ interface NewChannelSettlementModalProps {
 
 function NewChannelSettlementModal({ open, onClose, channelContracts, channels, onCreated }: NewChannelSettlementModalProps) {
   const [contractId, setContractId] = useState('');
-  const [periodStart, setPeriodStart] = useState('');
-  const [periodEnd, setPeriodEnd] = useState('');
   const [expectedAmount, setExpectedAmount] = useState<number | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -185,6 +238,16 @@ function NewChannelSettlementModal({ open, onClose, channelContracts, channels, 
 
   const selectedContract = channelContracts.find((c) => c.id === contractId);
   const currency = selectedContract?.currency || 'USD';
+
+  const today = new Date();
+  const periodEnd = today.toISOString().slice(0, 10);
+  const periodStart = selectedContract
+    ? (() => {
+        const d = new Date(today);
+        d.setDate(d.getDate() - selectedContract.settlement_cycle);
+        return d.toISOString().slice(0, 10);
+      })()
+    : '';
 
   useEffect(() => {
     if (!contractId || !periodStart || !periodEnd) {
@@ -201,8 +264,12 @@ function NewChannelSettlementModal({ open, onClose, channelContracts, channels, 
   }, [contractId, periodStart, periodEnd]);
 
   const handleContractChange = (value: string) => setContractId(value);
-  const handlePeriodStartChange = (value: string) => setPeriodStart(value);
-  const handlePeriodEndChange = (value: string) => setPeriodEnd(value);
+
+  const handleClose = () => {
+    setContractId('');
+    setExpectedAmount(null);
+    onClose();
+  };
 
   const handleSubmit = async () => {
     if (!contractId || !periodStart || !periodEnd || expectedAmount == null) {
@@ -233,10 +300,10 @@ function NewChannelSettlementModal({ open, onClose, channelContracts, channels, 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>新增渠道结算记录</DialogTitle>
+          <DialogTitle>新建结算周期</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
@@ -254,16 +321,23 @@ function NewChannelSettlementModal({ open, onClose, channelContracts, channels, 
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>周期开始</Label>
-              <Input type="date" value={periodStart} onChange={(e) => handlePeriodStartChange(e.target.value)} />
+
+          <div className="space-y-1.5">
+            <Label>结算周期</Label>
+            <div className="h-10 flex items-center px-3 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-700">
+              {selectedContract ? (
+                <span className="font-medium">{periodStart} ~ {periodEnd}</span>
+              ) : (
+                <span className="text-slate-400">选择合同后自动计算</span>
+              )}
             </div>
-            <div className="space-y-1.5">
-              <Label>周期结束</Label>
-              <Input type="date" value={periodEnd} onChange={(e) => handlePeriodEndChange(e.target.value)} />
-            </div>
+            {selectedContract && (
+              <p className="text-xs text-slate-400">
+                基于合同结算周期 {selectedContract.settlement_cycle} 天，结束日期为今日
+              </p>
+            )}
           </div>
+
           <div className="space-y-1.5">
             <Label>应结算金额</Label>
             <div className="h-10 flex items-center px-3 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-700">
@@ -272,10 +346,11 @@ function NewChannelSettlementModal({ open, onClose, channelContracts, channels, 
               ) : expectedAmount != null ? (
                 <span className="font-medium">系统计算：{expectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
               ) : (
-                <span className="text-slate-400">请选择合同和周期后自动计算</span>
+                <span className="text-slate-400">请先选择合同</span>
               )}
             </div>
           </div>
+
           <div className="space-y-1.5">
             <Label>币种</Label>
             <div className="h-10 flex items-center px-3 rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-700">
@@ -288,7 +363,7 @@ function NewChannelSettlementModal({ open, onClose, channelContracts, channels, 
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>取消</Button>
+          <Button variant="outline" onClick={handleClose}>取消</Button>
           <Button onClick={handleSubmit} disabled={saving || calculating || expectedAmount == null}>
             {saving ? '保存中...' : '创建'}
           </Button>

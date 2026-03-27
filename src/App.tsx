@@ -86,14 +86,17 @@ import { RoutingStrategyPage } from './components/routing/RoutingStrategyPage';
 import { MerchantAccountPage } from './components/merchant-account/MerchantAccountPage';
 import { MerchantAccountDetailPage } from './components/merchant-account/MerchantAccountDetailPage';
 import { MarginReportPage } from './components/finance/MarginReportPage';
+import { TransactionLedgerPage } from './components/finance/TransactionLedgerPage';
 import { ChannelSettlementPage } from './components/finance/ChannelSettlementPage';
 import { ChannelSettlementDetailPage } from './components/finance/ChannelSettlementDetailPage';
 import { MerchantSettlementPage } from './components/finance/MerchantSettlementPage';
 import { MerchantSettlementDetailPage } from './components/finance/MerchantSettlementDetailPage';
 import { CountryPage } from './components/platform/CountryPage';
 import { CurrencyPage } from './components/platform/CurrencyPage';
+import { DashboardPage } from './components/dashboard/DashboardPage';
 
 type View =
+  | { type: 'dashboard' }
   | { type: 'moonton-entity' }
   | { type: 'moonton-entity-detail'; entity: MoontonEntity }
   | { type: 'merchant' }
@@ -114,6 +117,7 @@ type View =
   | { type: 'routing-rules'; pmFilter?: string }
   | { type: 'routing-strategies' }
   | { type: 'margin-report' }
+  | { type: 'transaction-ledger' }
   | { type: 'channel-settlement' }
   | { type: 'channel-settlement-detail'; record: ChannelSettlementRecord }
   | { type: 'merchant-settlement' }
@@ -122,7 +126,7 @@ type View =
   | { type: 'platform-currencies' };
 
 function App() {
-  const [view, setView] = useState<View>({ type: 'moonton-entity' });
+  const [view, setView] = useState<View>({ type: 'dashboard' });
   const [moontonEntities, setMoontonEntities] = useState<MoontonEntity[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [merchantEntities, setMerchantEntities] = useState<MerchantEntity[]>([]);
@@ -362,7 +366,9 @@ function App() {
   }, [fetchMerchantAccounts, fetchOnboardings, fetchMoontonEntities, fetchMoontonKybRecords, fetchMerchants, fetchMerchantEntities, fetchApplications, fetchMerchantKybRecords, fetchChannels, fetchChannelPaymentMethods, fetchChannelPaymentMethodCountries, fetchChannelContracts, fetchMerchantContracts, fetchContractPaymentMethods, fetchRoutingRules, fetchRoutingRuleCountries, fetchRoutingStrategies, fetchPaymentMethods, fetchSettlementAccounts, fetchAppPaymentConfigs]);
 
   const currentPage: NavPage =
-    view.type === 'merchant' || view.type === 'merchant-detail'
+    view.type === 'dashboard'
+      ? 'dashboard'
+      : view.type === 'merchant' || view.type === 'merchant-detail'
       ? 'merchant'
       : view.type === 'channel' || view.type === 'channel-detail'
       ? 'channel'
@@ -384,6 +390,8 @@ function App() {
       ? 'routing-strategies'
       : view.type === 'margin-report'
       ? 'margin-report'
+      : view.type === 'transaction-ledger'
+      ? 'transaction-ledger'
       : view.type === 'channel-settlement' || view.type === 'channel-settlement-detail'
       ? 'channel-settlement'
       : view.type === 'merchant-settlement' || view.type === 'merchant-settlement-detail'
@@ -440,6 +448,9 @@ function App() {
 
   return (
     <Layout currentPage={currentPage} onNavigate={handleNavigate}>
+      {view.type === 'dashboard' && (
+        <DashboardPage onNavigate={handleNavigate} />
+      )}
       {view.type === 'moonton-entity' && (
         <MoontonEntityPage
           entities={moontonEntities}
@@ -665,8 +676,15 @@ function App() {
           channels={channels}
           channelContracts={channelContracts}
           contractPaymentMethods={contractPaymentMethods}
+          merchantContracts={merchantContracts}
           paymentMethods={paymentMethods}
           moontonEntities={moontonEntities}
+        />
+      )}
+      {view.type === 'transaction-ledger' && (
+        <TransactionLedgerPage
+          channels={channels}
+          merchants={merchants}
         />
       )}
       {view.type === 'channel-settlement' && (

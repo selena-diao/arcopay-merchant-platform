@@ -167,6 +167,105 @@ export async function transitionMerchantSettlementStatus(
   return mapMerchantSettlementRecord(data);
 }
 
+export async function confirmSettlement(
+  table: 'channel' | 'merchant',
+  id: string,
+  actualAmount: number,
+  notes?: string
+): Promise<ChannelSettlementRecord | MerchantSettlementRecord> {
+  const tableName = table === 'channel' ? 'channel_settlement_records' : 'merchant_settlement_records';
+  const today = new Date().toISOString().slice(0, 10);
+  const updates: Record<string, unknown> = {
+    status: 'SETTLED',
+    actual_amount: actualAmount,
+    settled_at: today,
+  };
+  if (notes?.trim()) updates.notes = notes.trim();
+
+  const { data, error } = await supabase
+    .from(tableName)
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return table === 'channel' ? mapChannelSettlementRecord(data) : mapMerchantSettlementRecord(data);
+}
+
+export async function markDisputed(
+  table: 'channel' | 'merchant',
+  id: string,
+  reason: string,
+  operator = 'ops-admin'
+): Promise<ChannelSettlementRecord | MerchantSettlementRecord> {
+  const tableName = table === 'channel' ? 'channel_settlement_records' : 'merchant_settlement_records';
+
+  const { data: current } = await supabase
+    .from(tableName)
+    .select('dispute_history, actual_amount')
+    .eq('id', id)
+    .maybeSingle();
+
+  const existing: DisputeHistoryEntry[] = (current?.dispute_history as DisputeHistoryEntry[]) ?? [];
+  const claimedAmount = current?.actual_amount != null ? Number(current.actual_amount) : undefined;
+  const entry: DisputeHistoryEntry = {
+    time: new Date().toISOString(),
+    operator,
+    reason,
+    ...(claimedAmount != null ? { claimed_amount: claimedAmount } : {}),
+  };
+
+  const { data, error } = await supabase
+    .from(tableName)
+    .update({
+      status: 'DISPUTED',
+      dispute_history: [...existing, entry],
+    })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return table === 'channel' ? mapChannelSettlementRecord(data) : mapMerchantSettlementRecord(data);
+}
+
+export async function startReconciliation(
+  table: 'channel' | 'merchant',
+  id: string,
+  actualAmount: number,
+  notes?: string
+): Promise<ChannelSettlementRecord | MerchantSettlementRecord> {
+  const tableName = table === 'channel' ? 'channel_settlement_records' : 'merchant_settlement_records';
+  const updates: Record<string, unknown> = {
+    status: 'IN_RECONCILIATION',
+    actual_amount: actualAmount,
+  };
+  if (notes?.trim()) updates.notes = notes.trim();
+
+  const { data, error } = await supabase
+    .from(tableName)
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return table === 'channel' ? mapChannelSettlementRecord(data) : mapMerchantSettlementRecord(data);
+}
+
+export async function reReconcile(
+  table: 'channel' | 'merchant',
+  id: string
+): Promise<ChannelSettlementRecord | MerchantSettlementRecord> {
+  const tableName = table === 'channel' ? 'channel_settlement_records' : 'merchant_settlement_records';
+  const { data, error } = await supabase
+    .from(tableName)
+    .update({ status: 'IN_RECONCILIATION' })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return table === 'channel' ? mapChannelSettlementRecord(data) : mapMerchantSettlementRecord(data);
+}
+
 export async function calculateExpectedAmount(
   channelContractId: string,
   periodStart: string,

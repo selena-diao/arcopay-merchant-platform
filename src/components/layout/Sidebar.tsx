@@ -1,5 +1,5 @@
 import { NavPage } from '../../types';
-import { Building2, Users, ChevronDown, CreditCard, Radio, FileText, Handshake, ClipboardList, Wallet, AppWindow, GitBranch, LayoutList, KeyRound, ChartBar as BarChart3, Landmark, Receipt, Globe, Coins } from 'lucide-react';
+import { Building2, Users, ChevronDown, CreditCard, Radio, FileText, Handshake, ClipboardList, Wallet, AppWindow, GitBranch, LayoutList, KeyRound, ChartBar as BarChart3, Landmark, Receipt, Globe, Coins, ScrollText, LayoutDashboard } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
 
@@ -30,6 +30,15 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">
+        <div className="mb-2">
+          <NavItem
+            icon={<LayoutDashboard className="w-4 h-4" />}
+            label="首页"
+            active={currentPage === 'dashboard'}
+            onClick={() => onNavigate('dashboard')}
+          />
+        </div>
+
         <div>
           <button
             onClick={() => setMasterDataOpen(!masterDataOpen)}
@@ -237,6 +246,12 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 label="费率差报表"
                 active={currentPage === 'margin-report'}
                 onClick={() => onNavigate('margin-report')}
+              />
+              <NavItem
+                icon={<ScrollText className="w-4 h-4" />}
+                label="交易流水"
+                active={currentPage === 'transaction-ledger'}
+                onClick={() => onNavigate('transaction-ledger')}
               />
               <NavItem
                 icon={<Landmark className="w-4 h-4" />}

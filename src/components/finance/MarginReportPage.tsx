@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Channel, ChannelContract, ContractPaymentMethod, MoontonEntity, PaymentMethod } from '../../types';
+import { Channel, ChannelContract, ContractPaymentMethod, MerchantContract, MoontonEntity, PaymentMethod } from '../../types';
 import { TrendingDown, TrendingUp, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -7,6 +7,7 @@ interface MarginReportPageProps {
   channels: Channel[];
   channelContracts: ChannelContract[];
   contractPaymentMethods: ContractPaymentMethod[];
+  merchantContracts: MerchantContract[];
   paymentMethods: PaymentMethod[];
   moontonEntities: MoontonEntity[];
 }
@@ -56,6 +57,7 @@ export function MarginReportPage({
   channels,
   channelContracts,
   contractPaymentMethods,
+  merchantContracts,
   paymentMethods,
   moontonEntities,
 }: MarginReportPageProps) {
@@ -69,41 +71,50 @@ export function MarginReportPage({
   const groups = useMemo<PaymentMethodGroup[]>(() => {
     const map = new Map<string, PaymentMethodGroup>();
 
+    const activeMcById = new Map(
+      merchantContracts.filter((mc) => mc.status === 'ACTIVE').map((mc) => [mc.id, mc])
+    );
+
     for (const cpm of contractPaymentMethods) {
       if (cpm.status !== 'ACTIVE') continue;
+      const mc = activeMcById.get(cpm.merchant_contract_id);
+      if (!mc) continue;
       const pm = paymentMethods.find((p) => p.id === cpm.payment_method_id);
       if (!pm) continue;
 
-      if (!map.has(cpm.payment_method_id)) {
-        map.set(cpm.payment_method_id, {
-          paymentMethodId: cpm.payment_method_id,
-          paymentMethodName: pm.name,
-          minQuotedRate: Infinity,
-          maxQuotedRate: -Infinity,
-          channelRows: [],
-          minChannelRateRaw: Infinity,
-          maxChannelRateRaw: -Infinity,
-          minMargin: Infinity,
-          maxMargin: -Infinity,
-          status: 'normal',
-        });
-      }
+      const scopedChannelContracts = filteredChannelContracts.filter(
+        (cc) => cc.status === 'ACTIVE' && cc.moonton_entity_id === mc.moonton_entity_id
+      );
 
-      const group = map.get(cpm.payment_method_id)!;
+      for (const cc of scopedChannelContracts) {
+        if (!map.has(cpm.payment_method_id)) {
+          map.set(cpm.payment_method_id, {
+            paymentMethodId: cpm.payment_method_id,
+            paymentMethodName: pm.name,
+            minQuotedRate: Infinity,
+            maxQuotedRate: -Infinity,
+            channelRows: [],
+            minChannelRateRaw: Infinity,
+            maxChannelRateRaw: -Infinity,
+            minMargin: Infinity,
+            maxMargin: -Infinity,
+            status: 'normal',
+          });
+        }
 
-      for (const cc of filteredChannelContracts) {
-        if (cc.status !== 'ACTIVE') continue;
+        const group = map.get(cpm.payment_method_id)!;
         const ch = channels.find((c) => c.id === cc.channel_id);
-        const margin = calcMargin(cpm.quoted_rate, cc.channel_rate);
+        const quotedRatePct = mc.quoted_rate * 100;
+        const margin = calcMargin(quotedRatePct, cc.channel_rate);
         group.channelRows.push({
           id: `${cpm.id}-${cc.id}`,
           channelName: ch?.display_name ?? ch?.name ?? cc.channel_id,
-          quotedRate: cpm.quoted_rate,
+          quotedRate: quotedRatePct,
           channelRateRaw: cc.channel_rate,
           margin,
         });
-        if (cpm.quoted_rate < group.minQuotedRate) group.minQuotedRate = cpm.quoted_rate;
-        if (cpm.quoted_rate > group.maxQuotedRate) group.maxQuotedRate = cpm.quoted_rate;
+        if (quotedRatePct < group.minQuotedRate) group.minQuotedRate = quotedRatePct;
+        if (quotedRatePct > group.maxQuotedRate) group.maxQuotedRate = quotedRatePct;
         if (cc.channel_rate < group.minChannelRateRaw) group.minChannelRateRaw = cc.channel_rate;
         if (cc.channel_rate > group.maxChannelRateRaw) group.maxChannelRateRaw = cc.channel_rate;
         if (margin < group.minMargin) group.minMargin = margin;
@@ -118,7 +129,7 @@ export function MarginReportPage({
     }
     result.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.paymentMethodName.localeCompare(b.paymentMethodName));
     return result;
-  }, [channels, filteredChannelContracts, contractPaymentMethods, paymentMethods]);
+  }, [channels, filteredChannelContracts, contractPaymentMethods, merchantContracts, paymentMethods]);
 
   let invertedCount = 0;
   let normalCount = 0;
