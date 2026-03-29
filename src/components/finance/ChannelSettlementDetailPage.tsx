@@ -583,6 +583,7 @@ export function ChannelSettlementDetailPage({
               showAiButton={record.expected_amount !== record.actual_amount && record.status === 'IN_RECONCILIATION'}
               onAiDiagnose={handleAiDiagnose}
               aiDiagnosing={aiDiagnosing}
+              aiAlreadyDiagnosed={!!diagnosisEntry}
             />
           )}
 
@@ -1107,13 +1108,14 @@ export function ChannelSettlementDetailPage({
   );
 }
 
-function DiffRow({ expected, actual, currency, showAiButton, onAiDiagnose, aiDiagnosing }: {
+function DiffRow({ expected, actual, currency, showAiButton, onAiDiagnose, aiDiagnosing, aiAlreadyDiagnosed }: {
   expected: number;
   actual: number;
   currency: string;
   showAiButton?: boolean;
   onAiDiagnose?: () => void;
   aiDiagnosing?: boolean;
+  aiAlreadyDiagnosed?: boolean;
 }) {
   const diff = actual - expected;
   const isEqual = Math.abs(diff) < 0.001;
@@ -1135,12 +1137,12 @@ function DiffRow({ expected, actual, currency, showAiButton, onAiDiagnose, aiDia
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${tagBg}`}>{tag}</span>
         {showAiButton && onAiDiagnose && (
           <button
-            onClick={onAiDiagnose}
-            disabled={aiDiagnosing}
+            onClick={aiAlreadyDiagnosed ? undefined : onAiDiagnose}
+            disabled={aiDiagnosing || aiAlreadyDiagnosed}
             className="ml-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            {aiDiagnosing ? '诊断中...' : 'AI 诊断'}
+            {aiDiagnosing ? '诊断中...' : aiAlreadyDiagnosed ? '已诊断' : 'AI 诊断'}
           </button>
         )}
       </div>
