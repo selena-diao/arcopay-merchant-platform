@@ -7,10 +7,7 @@ app = FastAPI(title="ArcoPay结算诊断Agent")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://arcopay-merchant-platform.vercel.app",
-        "http://localhost:5173",
-    ],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
