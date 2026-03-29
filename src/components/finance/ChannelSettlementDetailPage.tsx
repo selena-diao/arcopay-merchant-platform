@@ -164,7 +164,7 @@ export function ChannelSettlementDetailPage({
   const handleAiDiagnose = async () => {
     setAiDiagnosing(true);
     try {
-      const res = await fetch('http://127.0.0.1:8000/diagnose/channel', {
+      const res = await fetch('https://arcopay-merchant-platform-production.up.railway.app/diagnose/channel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ record_id: record.id }),
