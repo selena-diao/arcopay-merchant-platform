@@ -177,7 +177,17 @@ export function ChannelSettlementPage({ channels, channelContracts, onDrillDown 
                   className="hover:bg-slate-50 cursor-pointer transition-colors"
                   onClick={() => onDrillDown(r)}
                 >
-                  <td className="px-5 py-4 font-medium text-slate-900">{getChannelName(r)}</td>
+                  <td className="px-5 py-4 font-medium text-slate-900">
+                    <span className="inline-flex items-center gap-1.5">
+                      {getChannelName(r)}
+                      {(r.notes === 'ai_demo_locked' || r.notes === 'state_machine_demo') && (
+                        <span className="inline-block px-1.5 py-0.5 rounded" style={{ fontSize: '11px', lineHeight: '16px', backgroundColor: '#EEE9FD', color: '#6B46C1' }}>AI诊断</span>
+                      )}
+                      {r.notes === 'state_machine_demo' && (
+                        <span className="inline-block px-1.5 py-0.5 rounded" style={{ fontSize: '11px', lineHeight: '16px', backgroundColor: '#E6F4EA', color: '#2D7A3A' }}>全流程</span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-5 py-4 text-slate-600 whitespace-nowrap">
                     {r.period_start} ~ {r.period_end}
                   </td>

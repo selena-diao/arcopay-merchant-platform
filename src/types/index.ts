@@ -206,6 +206,8 @@ export interface DisputeHistoryEntry {
   reason?: string;
   claimed_amount?: number;
   action?: string;
+  full_diagnosis?: string;
+  manual_diagnosis?: string;
 }
 
 export interface ChannelSettlementRecord {

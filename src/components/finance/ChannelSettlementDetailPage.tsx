@@ -3,7 +3,7 @@ import { Channel, ChannelContract, ChannelSettlementRecord, Transaction, Payment
 import { confirmSettlement, markDisputed, reReconcile, startReconciliation } from '../../lib/settlementService';
 import { SettlementStatusBadge } from './SettlementStatusBadge';
 import { Button } from '../ui/button';
-import { ArrowLeft, ChevronLeft, ChevronRight, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Circle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Circle, RefreshCw, Sparkles } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -26,7 +26,7 @@ interface ChannelSettlementDetailPageProps {
   onRecordChange: (record: ChannelSettlementRecord) => void;
 }
 
-type ModalType = 'start_reconciliation' | 'confirm_settled' | 'mark_disputed' | 're_reconciliation' | 'force_settle' | null;
+type ModalType = 'start_reconciliation' | 'confirm_settled' | 'mark_disputed' | 're_reconciliation' | 'force_settle' | 'reject_diagnosis' | null;
 type TabType = 'info' | 'transactions' | 'history';
 
 const PAGE_SIZE = 20;
@@ -44,7 +44,9 @@ export function ChannelSettlementDetailPage({
   const [openResetConfirm, setOpenResetConfirm] = useState(false);
   const { toast } = useToast();
 
-  const isDemoRecord = record.period_start === '2026-03-01';
+  const isDemoLocked = record.notes === 'ai_demo_locked';
+
+  const lockedTip = '此为AI诊断演示记录，流转操作已锁定';
 
   const [startClaimedAmount, setStartClaimedAmount] = useState('');
   const [startNotes, setStartNotes] = useState('');
@@ -63,6 +65,18 @@ export function ChannelSettlementDetailPage({
   const [breakdownLoading, setBreakdownLoading] = useState(true);
   const [successTotal, setSuccessTotal] = useState<number | null>(null);
   const [avgChannelRate, setAvgChannelRate] = useState<number | null>(null);
+
+  const [aiDiagnosing, setAiDiagnosing] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const diagnosisEntry = [...record.dispute_history].reverse().find(
+    (e) => e.action === 'ai_diagnosis_pending' || e.action === 'ai_diagnosis_accepted' || e.action === 'ai_diagnosis_rejected'
+  );
+  const hasDiagnosisFeedback = record.dispute_history.some(
+    (e) => e.action === 'ai_diagnosis_accepted' || e.action === 'ai_diagnosis_rejected'
+  );
+  const hasDiff = record.actual_amount != null && record.expected_amount !== record.actual_amount;
+  const needsDiagnosisFeedback = hasDiff && !hasDiagnosisFeedback && !!diagnosisEntry;
 
   const contract = channelContracts.find((c) => c.id === record.channel_contract_id);
   const directCh = channels.find((c) => c.id === record.channel_id);
@@ -144,6 +158,103 @@ export function ChannelSettlementDetailPage({
       toast({ title: '加载交易失败', variant: 'destructive' });
     } finally {
       setTxLoading(false);
+    }
+  };
+
+  const handleAiDiagnose = async () => {
+    setAiDiagnosing(true);
+    try {
+      const res = await fetch('http://127.0.0.1:8000/diagnose/channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record_id: record.id }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const diagnosis: string = data.diagnosis ?? '';
+
+      console.log('[DEBUG] Writing to dispute_history', record.id);
+      await appendToDisputeHistory({
+        time: new Date().toISOString(),
+        operator: 'ai-agent',
+        action: 'ai_diagnosis_pending',
+        full_diagnosis: diagnosis,
+        note: diagnosis.split('\n').find((l: string) => l.trim().length > 0) ?? '',
+      });
+      console.log('diagnosis saved');
+      toast({ title: 'AI诊断完成' });
+    } catch {
+      toast({ title: 'AI诊断失败', variant: 'destructive' });
+    } finally {
+      setAiDiagnosing(false);
+    }
+  };
+
+  const appendToDisputeHistory = async (entry: import('../../types').DisputeHistoryEntry) => {
+    const { data: current } = await supabase
+      .from('channel_settlement_records')
+      .select('dispute_history')
+      .eq('id', record.id)
+      .maybeSingle();
+    const existing = (current?.dispute_history ?? []) as import('../../types').DisputeHistoryEntry[];
+    const { data: updated, error } = await supabase
+      .from('channel_settlement_records')
+      .update({ dispute_history: [...existing, entry] })
+      .eq('id', record.id)
+      .select()
+      .single();
+    if (error) throw error;
+    onRecordChange({
+      ...record,
+      dispute_history: updated.dispute_history ?? [],
+      updated_at: updated.updated_at,
+    });
+  };
+
+  const handleAcceptDiagnosis = async () => {
+    setSaving(true);
+    try {
+      const fullText = diagnosisEntry?.full_diagnosis ?? '';
+      const firstLine = fullText.split('\n').find((l: string) => l.trim().length > 0) ?? '';
+      await appendToDisputeHistory({
+        time: new Date().toISOString(),
+        action: 'ai_diagnosis_accepted',
+        operator: 'ops-admin',
+        note: firstLine,
+        full_diagnosis: fullText,
+      });
+      toast({ title: '已接受AI诊断' });
+    } catch {
+      toast({ title: '操作失败', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRejectDiagnosis = async () => {
+    if (!rejectReason.trim()) {
+      toast({ title: '请填写你的判断', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const fullText = diagnosisEntry?.full_diagnosis ?? '';
+      const firstLine = fullText.split('\n').find((l: string) => l.trim().length > 0) ?? '';
+      await appendToDisputeHistory({
+        time: new Date().toISOString(),
+        action: 'ai_diagnosis_rejected',
+        operator: 'ops-admin',
+        note: firstLine,
+        full_diagnosis: fullText,
+        manual_diagnosis: rejectReason.trim(),
+      });
+      setOpenModal(null);
+      setRejectReason('');
+      toast({ title: '已记录人工判断' });
+    } catch {
+      toast({ title: '操作失败', variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -283,39 +394,28 @@ export function ChannelSettlementDetailPage({
   const handleResetDemo = async () => {
     setSaving(true);
     try {
+      const isStateMachineDemo = record.notes === 'state_machine_demo';
+      const resetPayload = isStateMachineDemo
+        ? { status: 'PENDING', settled_at: null, actual_amount: null, dispute_history: [] }
+        : { status: 'IN_RECONCILIATION', settled_at: null, dispute_history: [] };
+
       const { data, error } = await supabase
         .from('channel_settlement_records')
-        .update({
-          status: 'PENDING',
-          actual_amount: null,
-          settled_at: null,
-          notes: null,
-          dispute_history: [],
-        })
-        .eq('period_start', '2026-03-01')
+        .update(resetPayload)
+        .eq('id', record.id)
         .select()
         .single();
 
       if (error) throw error;
 
-      const updated: ChannelSettlementRecord = {
-        id: data.id,
-        channel_contract_id: data.channel_contract_id,
-        channel_id: data.channel_id,
-        period_start: data.period_start,
-        period_end: data.period_end,
-        expected_amount: Number(data.expected_amount),
-        actual_amount: null,
-        currency: data.currency,
-        status: 'PENDING',
+      onRecordChange({
+        ...record,
+        status: isStateMachineDemo ? 'PENDING' : 'IN_RECONCILIATION',
         settled_at: null,
-        notes: null,
-        dispute_history: [],
-        created_at: data.created_at,
+        ...(isStateMachineDemo ? { actual_amount: null } : {}),
+        dispute_history: data.dispute_history ?? [],
         updated_at: data.updated_at,
-      };
-
-      onRecordChange(updated);
+      });
       setOpenResetConfirm(false);
       toast({ title: '演示记录已重置' });
     } catch {
@@ -333,11 +433,14 @@ export function ChannelSettlementDetailPage({
     REFUNDED: '已退款',
   };
 
-  type HistoryEntry = { time: string; label: string; type: 'create' | 'reconcile' | 'dispute' | 'settle' | 'force_settle' };
+  type HistoryEntry = { time: string; label: string; type: 'create' | 'reconcile' | 'dispute' | 'settle' | 'force_settle' | 'ai_diagnose' | 'ai_accept' | 'ai_reject' };
 
   const TYPE_ORDER: Record<string, number> = {
     create: 0,
     reconcile: 1,
+    ai_diagnose: 1.5,
+    ai_accept: 1.6,
+    ai_reject: 1.6,
     dispute: 2,
     force_settle: 3,
     settle: 3,
@@ -354,10 +457,25 @@ export function ChannelSettlementDetailPage({
           type: 'reconcile' as const,
         }]
       : []),
-    ...record.dispute_history.filter((e) => e.action !== '强制结算').map((e) => ({
+    ...record.dispute_history.filter((e) => e.action !== '强制结算' && e.action !== 'ai_diagnosis_pending' && e.action !== 'ai_diagnosis_accepted' && e.action !== 'ai_diagnosis_rejected').map((e) => ({
       time: e.time,
       label: `标记争议 · 声称: ${e.claimed_amount != null ? e.claimed_amount.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'} · ${e.reason ?? e.note ?? ''}`,
       type: 'dispute' as const,
+    })),
+    ...record.dispute_history.filter((e) => e.action === 'ai_diagnosis_pending').map((e) => ({
+      time: e.time,
+      label: 'AI诊断完成',
+      type: 'ai_diagnose' as const,
+    })),
+    ...record.dispute_history.filter((e) => e.action === 'ai_diagnosis_accepted').map((e) => ({
+      time: e.time,
+      label: `接受AI诊断`,
+      type: 'ai_accept' as const,
+    })),
+    ...record.dispute_history.filter((e) => e.action === 'ai_diagnosis_rejected').map((e) => ({
+      time: e.time,
+      label: `否定AI诊断 · 已记录人工判断`,
+      type: 'ai_reject' as const,
     })),
     ...record.dispute_history.filter((e) => e.action === '强制结算').map((e) => ({
       time: e.time,
@@ -376,6 +494,7 @@ export function ChannelSettlementDetailPage({
     if (typeDiff !== 0) return typeDiff;
     return new Date(a.time).getTime() - new Date(b.time).getTime();
   });
+
 
   const tabs: { key: TabType; label: string }[] = [
     { key: 'info', label: '基本信息' },
@@ -399,7 +518,8 @@ export function ChannelSettlementDetailPage({
           <p className="text-slate-500 mt-1 text-sm">记录 ID: {record.id}</p>
         </div>
         <div className="flex items-center gap-3">
-          {isDemoRecord && (
+          {(() => { console.log('[DEBUG] record.notes =', record?.notes); return null; })()}
+          {(record?.notes === 'ai_demo_locked' || record?.notes === 'state_machine_demo') && (
             <Button
               variant="ghost"
               size="sm"
@@ -451,12 +571,19 @@ export function ChannelSettlementDetailPage({
                 }
               />
               {record.settled_at && <Field label="结算日期" value={record.settled_at} />}
-              {record.notes && <Field label="备注" value={record.notes} />}
+              {record.notes && record.notes !== 'ai_demo_locked' && <Field label="备注" value={record.notes} />}
             </div>
           </div>
 
           {record.actual_amount != null && (
-            <DiffRow expected={record.expected_amount} actual={record.actual_amount} currency={record.currency} />
+            <DiffRow
+              expected={record.expected_amount}
+              actual={record.actual_amount}
+              currency={record.currency}
+              showAiButton={record.expected_amount !== record.actual_amount && record.status === 'IN_RECONCILIATION'}
+              onAiDiagnose={handleAiDiagnose}
+              aiDiagnosing={aiDiagnosing}
+            />
           )}
 
           {record.status === 'SETTLED' && record.actual_amount != null && Math.abs(record.actual_amount - record.expected_amount) >= 0.001 && (
@@ -464,6 +591,63 @@ export function ChannelSettlementDetailPage({
               <p className="text-xs text-slate-500 leading-relaxed">
                 此结算记录存在金额差异。如需处理，请通过财务申诉流程跟进，结算状态不再变更。
               </p>
+            </div>
+          )}
+
+          {diagnosisEntry && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 px-5 py-4 mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-4 h-4 text-indigo-500" />
+                <span className="text-sm font-semibold text-indigo-700">AI诊断结果</span>
+              </div>
+              <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                {(diagnosisEntry.full_diagnosis ?? '').split(/\n/).map((line: string, i: number) => (
+                  <p key={i} className={line.trim() === '' ? 'h-2' : ''}>
+                    {line.split(/\*\*(.*?)\*\*/).map((seg: string, j: number) =>
+                      j % 2 === 1 ? <strong key={j}>{seg}</strong> : <span key={j}>{seg}</span>
+                    )}
+                  </p>
+                ))}
+              </div>
+              {diagnosisEntry.action === 'ai_diagnosis_rejected' && diagnosisEntry.manual_diagnosis && (
+                <div className="mt-3 pt-3 border-t border-indigo-200">
+                  <span className="text-xs font-semibold text-slate-600">人工判断</span>
+                  <p className="text-sm text-slate-700 mt-1">{diagnosisEntry.manual_diagnosis}</p>
+                </div>
+              )}
+              {diagnosisEntry.action === 'ai_diagnosis_pending' && (
+                <div className="flex items-center gap-3 mt-4 pt-3 border-t border-indigo-200">
+                  <Button
+                    size="sm"
+                    onClick={handleAcceptDiagnosis}
+                    disabled={saving}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                  >
+                    {saving ? '处理中...' : '接受诊断'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { setRejectReason(''); setOpenModal('reject_diagnosis'); }}
+                    disabled={saving}
+                    className="text-xs text-slate-600"
+                  >
+                    否定诊断
+                  </Button>
+                </div>
+              )}
+              {diagnosisEntry.action === 'ai_diagnosis_accepted' && (
+                <div className="mt-3 pt-3 border-t border-indigo-200 flex items-center justify-between">
+                  <span className="text-xs font-medium text-emerald-600">已接受AI诊断</span>
+                  <span className="text-xs text-slate-400">{new Date(diagnosisEntry.time).toLocaleString('zh-CN')}</span>
+                </div>
+              )}
+              {diagnosisEntry.action === 'ai_diagnosis_rejected' && (
+                <div className="mt-3 pt-3 border-t border-indigo-200 flex items-center justify-between">
+                  <span className="text-xs font-medium text-orange-600">已否定AI诊断，采用人工判断</span>
+                  <span className="text-xs text-slate-400">{new Date(diagnosisEntry.time).toLocaleString('zh-CN')}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -502,54 +686,78 @@ export function ChannelSettlementDetailPage({
             )}
           </div>
 
-          {record.status !== 'SETTLED' && (
-            <div className="flex flex-wrap gap-3">
-              {record.status === 'PENDING' && (
-                <Button
-                  onClick={() => {
-                    setStartClaimedAmount('');
-                    setStartNotes('');
-                    setOpenModal('start_reconciliation');
-                  }}
-                  disabled={saving}
-                >
-                  开始对账
-                </Button>
-              )}
-              {record.status === 'IN_RECONCILIATION' && (
-                <>
-                  <Button
-                    onClick={() => {
-                      setConfirmAmount(record.actual_amount != null ? record.actual_amount.toFixed(2) : record.expected_amount.toFixed(2));
-                      setConfirmNotes('');
-                      setOpenModal('confirm_settled');
-                    }}
-                  >
-                    确认结算
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      setDisputeReason('');
-                      setOpenModal('mark_disputed');
-                    }}
-                  >
-                    标记争议
-                  </Button>
-                </>
-              )}
-              {record.status === 'DISPUTED' && (
-                <>
-                  <Button variant="outline" onClick={() => setOpenModal('re_reconciliation')}>
-                    重新对账
-                  </Button>
-                  <Button variant="secondary" onClick={() => setOpenModal('force_settle')}>
-                    强制结算
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
+          {record.status !== 'SETTLED' && (() => {
+            const opsDisabled = isDemoLocked || needsDiagnosisFeedback;
+            const opsTip = isDemoLocked ? lockedTip : needsDiagnosisFeedback ? '请先对AI诊断结果表态后再操作' : undefined;
+            return (
+              <>
+                <div className="flex flex-wrap gap-3">
+                  {record.status === 'PENDING' && (
+                    <span title={opsTip}>
+                      <Button
+                        onClick={() => {
+                          setStartClaimedAmount('');
+                          setStartNotes('');
+                          setOpenModal('start_reconciliation');
+                        }}
+                        disabled={saving || opsDisabled}
+                        className={opsDisabled ? 'pointer-events-none' : ''}
+                      >
+                        开始对账
+                      </Button>
+                    </span>
+                  )}
+                  {record.status === 'IN_RECONCILIATION' && (
+                    <>
+                      <span title={opsTip}>
+                        <Button
+                          onClick={() => {
+                            setConfirmAmount(record.actual_amount != null ? record.actual_amount.toFixed(2) : record.expected_amount.toFixed(2));
+                            setConfirmNotes('');
+                            setOpenModal('confirm_settled');
+                          }}
+                          disabled={opsDisabled}
+                          className={opsDisabled ? 'pointer-events-none' : ''}
+                        >
+                          确认结算
+                        </Button>
+                      </span>
+                      <span title={opsTip}>
+                        <Button
+                          variant="destructive"
+                          onClick={() => {
+                            setDisputeReason('');
+                            setOpenModal('mark_disputed');
+                          }}
+                          disabled={opsDisabled}
+                          className={opsDisabled ? 'pointer-events-none' : ''}
+                        >
+                          标记争议
+                        </Button>
+                      </span>
+                    </>
+                  )}
+                  {record.status === 'DISPUTED' && (
+                    <>
+                      <span title={opsTip}>
+                        <Button variant="outline" onClick={() => setOpenModal('re_reconciliation')} disabled={opsDisabled} className={opsDisabled ? 'pointer-events-none' : ''}>
+                          重新对账
+                        </Button>
+                      </span>
+                      <span title={opsTip}>
+                        <Button variant="secondary" onClick={() => setOpenModal('force_settle')} disabled={opsDisabled} className={opsDisabled ? 'pointer-events-none' : ''}>
+                          强制结算
+                        </Button>
+                      </span>
+                    </>
+                  )}
+                </div>
+                {isDemoLocked && (
+                  <p className="text-xs text-slate-400 mt-2">此为AI诊断演示记录，仅供展示AI诊断流程，不支持流转至下一状态。</p>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
 
@@ -629,20 +837,30 @@ export function ChannelSettlementDetailPage({
               <div key={i} className="flex gap-4">
                 <div className="flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    entry.type === 'settle' || entry.type === 'force_settle'
+                    entry.type === 'settle' || entry.type === 'force_settle' || entry.type === 'ai_accept'
                       ? 'bg-emerald-50'
                       : entry.type === 'dispute'
                       ? 'bg-red-50'
                       : entry.type === 'reconcile'
                       ? 'bg-blue-50'
+                      : entry.type === 'ai_diagnose'
+                      ? 'bg-indigo-50'
+                      : entry.type === 'ai_reject'
+                      ? 'bg-orange-50'
                       : 'bg-slate-100'
                   }`}>
                     {entry.type === 'settle' || entry.type === 'force_settle' ? (
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    ) : entry.type === 'ai_accept' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    ) : entry.type === 'ai_reject' ? (
+                      <AlertCircle className="w-4 h-4 text-orange-500" />
                     ) : entry.type === 'dispute' ? (
                       <AlertCircle className="w-4 h-4 text-red-500" />
                     ) : entry.type === 'reconcile' ? (
                       <RefreshCw className="w-4 h-4 text-blue-500" />
+                    ) : entry.type === 'ai_diagnose' ? (
+                      <Sparkles className="w-4 h-4 text-indigo-500" />
                     ) : (
                       <Circle className="w-4 h-4 text-slate-400" />
                     )}
@@ -858,11 +1076,45 @@ export function ChannelSettlementDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 否定诊断 Modal */}
+      <Dialog open={openModal === 'reject_diagnosis'} onOpenChange={() => setOpenModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>填写你的判断</DialogTitle>
+            <DialogDescription>请说明你认为差异的真实原因</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>真实原因 <span className="text-red-500">*</span></Label>
+              <Textarea
+                rows={3}
+                placeholder="请描述你认为的差异真实原因..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenModal(null)}>取消</Button>
+            <Button onClick={handleRejectDiagnosis} disabled={saving}>
+              {saving ? '处理中...' : '确认提交'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function DiffRow({ expected, actual, currency }: { expected: number; actual: number; currency: string }) {
+function DiffRow({ expected, actual, currency, showAiButton, onAiDiagnose, aiDiagnosing }: {
+  expected: number;
+  actual: number;
+  currency: string;
+  showAiButton?: boolean;
+  onAiDiagnose?: () => void;
+  aiDiagnosing?: boolean;
+}) {
   const diff = actual - expected;
   const isEqual = Math.abs(diff) < 0.001;
   const isShort = diff < -0.001;
@@ -881,6 +1133,16 @@ function DiffRow({ expected, actual, currency }: { expected: number; actual: num
           {sign}{diff.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currency}
         </span>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${tagBg}`}>{tag}</span>
+        {showAiButton && onAiDiagnose && (
+          <button
+            onClick={onAiDiagnose}
+            disabled={aiDiagnosing}
+            className="ml-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {aiDiagnosing ? '诊断中...' : 'AI 诊断'}
+          </button>
+        )}
       </div>
     </div>
   );
