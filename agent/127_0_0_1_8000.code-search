@@ -1,0 +1,9 @@
+# Query: 127.0.0.1:8000
+# ContextLines: 1
+
+1 result - 1 file
+
+src/components/finance/ChannelSettlementDetailPage.tsx:
+  166      try {
+  167:       const res = await fetch('https://arcopay-merchant-platform-production.up.railway.app/diagnose/channel', {
+  168          method: 'POST',
