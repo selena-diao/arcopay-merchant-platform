@@ -18,7 +18,7 @@ import os, json
 load_dotenv()
 
 llm = ChatOpenAI(
-    model="moonshot-v1-8k",
+    model="kimi-k3",
     api_key=os.getenv("OPENAI_API_KEY"),
     base_url=os.getenv("OPENAI_BASE_URL"),
     temperature=0,
